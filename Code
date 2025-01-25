@@ -1,0 +1,165 @@
+  !pip install transformers torch scikit-learn datasets
+
+  import torch
+  from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments
+  from datasets import Dataset, DatasetDict
+  from sklearn.model_selection import train_test_split
+  from sklearn.metrics import accuracy_score
+
+  # 1. بارگذاری داده‌ها (20 Newsgroups)
+  from sklearn.datasets import fetch_20newsgroups
+  categories = ['sci.space', 'rec.sport.baseball', 'talk.politics.mideast', 'comp.graphics']
+  newsgroups = fetch_20newsgroups(subset='all', categories=categories, remove=('headers', 'footers', 'quotes'))
+  texts = newsgroups.data
+  labels = newsgroups.target
+
+  # تقسیم داده‌ها به آموزش و تست
+  train_texts, test_texts, train_labels, test_labels = train_test_split(texts, labels, test_size=0.2, random_state=42)
+
+  # 2. تبدیل داده‌ها به فرمت Dataset
+  train_data = Dataset.from_dict({'text': train_texts, 'label': train_labels})
+  test_data = Dataset.from_dict({'text': test_texts, 'label': test_labels})
+
+  # ایجاد DatasetDict برای سازگاری با Trainer
+  data = DatasetDict({"train": train_data, "test": test_data})
+
+  # 3. بارگذاری Tokenizer و Model
+  model_name = "bert-base-uncased"
+  tokenizer = BertTokenizer.from_pretrained(model_name)
+  model = BertForSequenceClassification.from_pretrained(model_name, num_labels=len(categories)).to('cuda')
+
+  # توکن‌سازی داده‌ها
+  def tokenize_function(examples):
+      return tokenizer(examples["text"], padding="max_length", truncation=True, max_length=512)
+
+  tokenized_data = data.map(tokenize_function, batched=True)
+
+  # تبدیل داده‌ها به فرمت PyTorch و انتقال به GPU
+  def convert_to_tensor(batch):
+      batch['input_ids'] = torch.tensor(batch['input_ids']).to('cuda')
+      batch['attention_mask'] = torch.tensor(batch['attention_mask']).to('cuda')
+      batch['label'] = torch.tensor(batch['label']).to('cuda')
+      return batch
+
+  tokenized_data = tokenized_data.map(convert_to_tensor, batched=True)
+
+  # 4. تعریف متریک ارزیابی
+  def  compute_metrics(pred):
+      logits = torch.tensor(pred.predictions).to('cuda')
+      preds = torch.argmax(logits, dim=1).cpu().numpy()
+      labels = pred.label_ids
+      acc = accuracy_score(labels, preds)
+      return {"accuracy": acc}
+
+  # 5. تعریف تنظیمات آموزش
+  training_args = TrainingArguments(
+      output_dir="./results",
+      evaluation_strategy="epoch",
+      save_strategy="epoch",
+      num_train_epochs=20,
+      per_device_train_batch_size=8,
+      per_device_eval_batch_size=8,
+      warmup_steps=500,
+      weight_decay=0.01,
+      logging_dir="./logs",
+      logging_steps=10,
+      load_best_model_at_end=True,
+  )
+
+  # 6. تنظیم Trainer
+  trainer = Trainer(
+      model=model,
+      args=training_args,
+      train_dataset=tokenized_data["train"],
+      eval_dataset=tokenized_data["test"],
+      compute_metrics=compute_metrics,
+  )
+
+  # 7. آموزش مدل
+  trainer.train()
+
+  # 8. ارزیابی مدل
+  trainer.evaluate()
+
+  # 9. پیش‌بینی موضوع متن جدید
+  def predict_topic(text):
+      inputs = tokenizer(text, return_tensors="pt", padding="max_length", truncation=True, max_length=512).to('cuda')
+      outputs = model(**inputs)
+      prediction = torch.argmax(outputs.logits, dim=1).cpu().numpy()
+      return newsgroups.target_names[prediction.item()]
+
+  import wandb
+  import random
+
+  # start a new wandb run to track this script
+  wandb.init(
+      # set the wandb project where this run will be logged
+    project="my-awesome-project",
+
+      # track hyperparameters and run metadata
+    config={
+    "learning_rate": 0.02,
+  "architecture": "CNN",
+  "dataset": "CIFAR-100",
+  "epochs": 20,
+  }
+  )
+
+  # simulate training
+  epochs = 10
+  offset = random.random() / 5
+  for epoch in range(2, epochs):
+      acc = 1 - 2 ** -epoch - random.random() / epoch - offset
+      loss = 2 ** -epoch + random.random() / epoch + offset
+
+      # log metrics to wandb
+      wandb.log({"acc": acc, "loss": loss})
+
+  # [optional] finish the wandb run, necessary in notebooks
+  wandb.finish()
+
+  # دریافت متن جدید از کاربر
+  new_text = input("Enter a text to classify its topic: ")
+  predicted_topic = predict_topic(new_text)
+  print(f"The predicted topic is: {predicted_topic}")
+
+a682173453d4d7de12caf82f0c482a823c36bf04
+
+import torch
+from transformers import BertTokenizer, BertForSequenceClassification
+from google.colab import drive
+
+
+# مسیر جدید مدل و توکنایزر ذخیره‌شده
+model_path = "/content/drive/My Drive/TM/model"
+tokenizer_path = "/content/drive/My Drive/TM/tokenizer"
+
+# بارگذاری مدل و توکنایزر از مسیر جدید
+model = BertForSequenceClassification.from_pretrained(model_path).to('cuda')
+tokenizer = BertTokenizer.from_pretrained(tokenizer_path)
+
+# نمایش مدل مورد استفاده
+print(f"Using model from: {model_path}")
+print(f"Using tokenizer from: {tokenizer_path}")
+
+# بررسی وجود دستگاه CUDA
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+
+# تعریف دسته‌ها
+categories = ['sci.space', 'rec.sport.baseball', 'talk.politics.mideast', 'comp.graphics']
+
+def predict_topic(text):
+    inputs = tokenizer(text, return_tensors="pt", padding="max_length", truncation=True, max_length=512).to(device)
+    with torch.no_grad():
+        outputs = model(**inputs)
+    prediction = torch.argmax(outputs.logits, dim=1).cpu().numpy()
+    return categories[prediction.item()]
+
+# ایجاد حلقه برای گرفتن ورودی از کاربر و پیش‌بینی موضوع
+while True:
+    user_input = input("Enter a text to classify its topic (or type 'exit' to quit): ")
+    if user_input.lower() == 'exit':
+        break
+    predicted_topic = predict_topic(user_input)
+    print(f"The predicted topic is: {predicted_topic}")
