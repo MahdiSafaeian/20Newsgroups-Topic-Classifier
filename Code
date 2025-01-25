@@ -1,5 +1,5 @@
   !pip install transformers torch scikit-learn datasets
-
+############################################
   import torch
   from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments
   from datasets import Dataset, DatasetDict
@@ -122,9 +122,9 @@
   new_text = input("Enter a text to classify its topic: ")
   predicted_topic = predict_topic(new_text)
   print(f"The predicted topic is: {predicted_topic}")
-
-a682173453d4d7de12caf82f0c482a823c36bf04
-
+######################################################
+WPS Code :a682173453d4d7de12caf82f0c482a823c36bf04
+##################################################################
 import torch
 from transformers import BertTokenizer, BertForSequenceClassification
 from google.colab import drive
